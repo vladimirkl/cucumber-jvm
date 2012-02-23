@@ -5,11 +5,17 @@ import cucumber.runtime.java.ObjectFactory;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.support.BeanDefinitionBuilder;
 import org.springframework.beans.factory.support.BeanDefinitionRegistry;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.AbstractApplicationContext;
+import org.springframework.context.support.AbstractXmlApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
+import org.springframework.context.support.FileSystemXmlApplicationContext;
+import org.springframework.core.io.Resource;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 
 /**
  * Spring based implementation of ObjectFactory.
@@ -33,8 +39,9 @@ public class SpringFactory implements ObjectFactory {
 
     private static AbstractApplicationContext applicationContext;
 
-    private ClassPathXmlApplicationContext stepContext;
-    private final Collection<Class<?>> stepClasses = new ArrayList<Class<?>>();
+    private AbstractXmlApplicationContext stepContext;
+    private final Collection<Class<?>> stepClasses = new HashSet<Class<?>> ();
+    private static final Resource[] glueConfigResources;
 
     public SpringFactory() {
     }
@@ -42,6 +49,11 @@ public class SpringFactory implements ObjectFactory {
     static {
         applicationContext = new ClassPathXmlApplicationContext(new String[]{"cucumber.xml"});
         applicationContext.registerShutdownHook();
+        try {
+            glueConfigResources = applicationContext.getResources("classpath*:cucumber-glue.xml");
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
@@ -56,8 +68,13 @@ public class SpringFactory implements ObjectFactory {
     }
 
     private void createNewStepContext() {
-        stepContext = new ClassPathXmlApplicationContext(new String[]{"classpath*:cucumber-glue.xml"},
-                applicationContext);
+        stepContext = new AbstractXmlApplicationContext(applicationContext) {
+            @Override
+            protected Resource[] getConfigResources() {
+                return glueConfigResources;
+            }
+        };
+        stepContext.refresh();
     }
 
     private void populateStepContext() {
